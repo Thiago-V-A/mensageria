@@ -4,3 +4,11 @@ server:
 spring:
   kafka:
     bootstrap-servers: localhost:9092
+    producer:
+      acks: all
+      retries: 3
+      enable-idempotence: true
+    consumer:
+      group-id: inventory-group
+      auto-offset-reset: earliest
+      enable-auto-commit: false
