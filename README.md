@@ -1,4 +1,3 @@
-````markdown
 # Kafka Messaging System
 
 Este projeto simula uma plataforma de comércio eletrônico utilizando Apache Kafka como backbone de mensageria, com três microsserviços desenvolvidos em Java com Spring Boot. O objetivo é projetar, implementar e documentar um sistema distribuído que usa Kafka para processar eventos em tempo real, explorando tópicos, partições, entre outros conceitos.
@@ -21,7 +20,6 @@ Para executar este projeto, você precisará ter instalado:
 Para iniciar o broker Kafka e o Zookeeper, utilize o Docker Compose:
 
 docker-compose up -d
-````
 
 **Criação de Tópicos:**
 Os tópicos `orders` e `inventory-events` são necessários para o funcionamento do sistema. Embora o Spring Kafka possa criá-los automaticamente na primeira mensagem, você pode criá-los manualmente via `kafka-topics.sh` se desejar garantir sua existência:
