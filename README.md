@@ -34,106 +34,11 @@ O sistema simula um fluxo completo de processamento de pedidos:
 
 ### Diagrama de Arquitetura Geral
 
-```plantuml
-@startuml sistema-arquitetura
-!theme aws-orange
-skinparam backgroundColor #f9f9f9
-skinparam defaultFontName Arial
-
-title Sistema de Mensageria Kafka - Arquitetura Geral
-
-package "Cliente" {
-  [Frontend/API Client] as Client
-}
-
-package "Microsserviços" {
-  [Order Service] as OrderService
-  [Inventory Service] as InventoryService  
-  [Notification Service] as NotificationService
-}
-
-package "Infraestrutura Kafka" {
-  database "Zookeeper" as ZK
-  queue "Kafka Broker" as Kafka
-  
-  frame "Tópicos" {
-    queue "orders" as OrdersTopic
-    queue "inventory-events" as InventoryTopic
-  }
-}
-
-Client -down-> OrderService : POST /orders
-OrderService -down-> OrdersTopic : Publica pedido
-OrdersTopic -down-> InventoryService : Consome pedido
-InventoryService -down-> InventoryTopic : Publica evento estoque
-InventoryTopic -down-> NotificationService : Consome evento
-ZK -right-> Kafka : Coordenação
-Kafka -up-> OrdersTopic
-Kafka -up-> InventoryTopic
-
-note right of OrderService
-  - Porta: 8081
-  - Produtor Kafka
-  - API REST
-end note
-
-note right of InventoryService
-  - Porta: 8082
-  - Consumidor + Produtor
-  - Lógica de negócio
-end note
-
-note right of NotificationService
-  - Porta: 8083
-  - Consumidor final
-  - Notificações
-end note
-
-@enduml
-```
+![Diagrama de Arquitetura Geral](diagramas/rquitetura_geral.png)
 
 ### Diagrama de Componentes Detalhado
 
-```plantuml
-@startuml componentes-detalhado
-!theme aws-orange
-
-package "Order Service (8081)" {
-  [OrderController] as OC
-  [OrderProducerService] as OPS
-  [KafkaProducerConfig] as OKC
-  [OrderDTO] as ODTO
-}
-
-package "Inventory Service (8082)" {
-  [InventoryListener] as IL
-  [KafkaConsumerProducerConfig] as IKCP
-}
-
-package "Notification Service (8083)" {
-  [NotificationListener] as NL
-  [KafkaConsumerConfig] as NKC
-}
-
-package "Apache Kafka" {
-  queue "orders" as OT
-  queue "inventory-events" as IT
-}
-
-OC --> OPS : delega processamento
-OPS --> OKC : usa configuração
-OPS --> ODTO : serializa
-OPS --> OT : envia mensagem
-
-OT --> IL : consome mensagem
-IL --> IKCP : usa configuração
-IL --> IT : publica evento
-
-IT --> NL : consome evento  
-NL --> NKC : usa configuração
-
-@enduml
-```
+![Diagrama de Arquitetura Geral](diagramas/componente_detalhado.png)
 
 ## 🧩 Componentes
 
@@ -183,101 +88,11 @@ NL --> NKC : usa configuração
 
 ### Sequência de Processamento Completa
 
-```plantuml
-@startuml fluxo-sequencia
-!theme aws-orange
-actor Cliente as C
-participant "Order Service" as OS
-queue "Tópico: orders" as TO
-participant "Inventory Service" as IS
-queue "Tópico: inventory-events" as TI
-participant "Notification Service" as NS
-
-C -> OS: POST /orders\n{"items": ["item1", "item2"]}
-activate OS
-
-OS -> OS: Gerar UUID
-OS -> OS: Validar dados
-OS -> TO: Publicar pedido\n{orderId, timestamp, items}
-OS -> C: 200 OK\n{orderId, status: "ACCEPTED"}
-deactivate OS
-
-TO -> IS: Consumir pedido
-activate IS
-
-IS -> IS: Verificar idempotência
-IS -> IS: Simular verificação estoque\n(items.size() <= 5 ?)
-
-alt Estoque disponível
-  IS -> IS: Status = "RESERVADO"
-else Sem estoque
-  IS -> IS: Status = "FALHA"
-end
-
-IS -> TI: Publicar evento\n{orderId, status, message}
-IS -> TO: Acknowledge (commit offset)
-deactivate IS
-
-TI -> NS: Consumir evento
-activate NS
-
-NS -> NS: Verificar idempotência
-NS -> NS: Simular envio notificação
-NS -> NS: Log no console
-
-note right of NS
-📧 Para: cliente@email.com
-📱 SMS: +55 (62) 99999-9999
-🔢 Pedido: [orderId]
-📊 Status: [status]
-end note
-
-NS -> TI: Acknowledge
-deactivate NS
-
-@enduml
-```
+![Diagrama de Arquitetura Geral](diagramas/fluxo_sequencia.png)
 
 ### Estados e Transições
 
-```plantuml
-@startuml estados-pedido
-!theme aws-orange
-
-[*] --> Criado : Cliente envia pedido
-Criado --> Processando : Publicado no Kafka
-Processando --> Reservado : Estoque disponível
-Processando --> Rejeitado : Sem estoque
-Reservado --> Notificado : Notificação enviada
-Rejeitado --> Notificado : Notificação enviada
-Notificado --> [*]
-
-note right of Criado
-  - UUID gerado
-  - Dados validados
-  - Timestamp criado
-end note
-
-note right of Processando
-  - Consumido pelo Inventory
-  - Verificação de estoque
-  - Lógica de negócio
-end note
-
-note right of Reservado
-  - Estoque reservado
-  - Evento publicado
-  - Status: RESERVADO
-end note
-
-note right of Rejeitado
-  - Estoque insuficiente
-  - Evento publicado  
-  - Status: FALHA
-end note
-
-@enduml
-```
+![Diagrama de Arquitetura Geral](diagramas/estado_pedido.png)
 
 ## ⚙️ Configuração e Execução
 
@@ -467,50 +282,7 @@ echo "✅ Testes concluídos!"
 
 #### Escalabilidade Horizontal
 
-```plantuml
-@startuml escalabilidade
-!theme aws-orange
-
-package "Load Balancer" {
-  [Load Balancer] as LB
-}
-
-package "Order Service Cluster" {
-  [Order Service 1] as OS1
-  [Order Service 2] as OS2  
-  [Order Service 3] as OS3
-}
-
-package "Kafka Cluster" {
-  [Broker 1] as KB1
-  [Broker 2] as KB2
-  [Broker 3] as KB3
-  
-  queue "orders (P0)" as OP0
-  queue "orders (P1)" as OP1
-  queue "orders (P2)" as OP2
-}
-
-package "Inventory Service Group" {
-  [Inventory Instance 1] as IS1
-  [Inventory Instance 2] as IS2
-  [Inventory Instance 3] as IS3
-}
-
-LB --> OS1
-LB --> OS2
-LB --> OS3
-
-OS1 --> KB1
-OS2 --> KB2  
-OS3 --> KB3
-
-OP0 --> IS1
-OP1 --> IS2
-OP2 --> IS3
-
-@enduml
-```
+![Escalabilidade](diagramas/escalabilidade.png)
 
 **Estratégias de Escalabilidade:**
 
@@ -539,37 +311,7 @@ spring:
 
 #### Cenários de Falha e Recuperação
 
-```plantuml
-@startuml tolerancia-falhas
-!theme aws-orange
-
-participant "Producer" as P
-participant "Kafka Broker 1" as KB1
-participant "Kafka Broker 2" as KB2  
-participant "Consumer" as C
-
-== Cenário Normal ==
-P -> KB1: Enviar mensagem
-KB1 -> KB2: Replicar
-KB1 -> P: ACK
-KB1 -> C: Entregar mensagem
-
-== Falha do Broker Líder ==
-P -> KB1: Enviar mensagem
-note over KB1: ❌ Broker falha
-KB2 -> KB2: Eleição de líder
-P -> KB2: Retry automático
-KB2 -> P: ACK
-KB2 -> C: Entregar mensagem
-
-== Falha do Consumer ==
-KB1 -> C: Entregar mensagem
-note over C: ❌ Consumer falha\n(sem ACK)
-note over KB1: Mensagem permanece\nnão commitada
-KB1 -> C: Re-entregar mensagem\n(quando consumer voltar)
-
-@enduml
-```
+![Tolerancia a Falhas](diagramas/tolerancia_falhas.png)
 
 **Mecanismos de Tolerância:**
 
@@ -592,47 +334,7 @@ KB1 -> C: Re-entregar mensagem\n(quando consumer voltar)
 
 #### Implementação Multicamada
 
-```plantuml
-@startuml idempotencia
-!theme aws-orange
-
-participant "Client" as C
-participant "Order Service" as OS
-participant "Kafka" as K
-participant "Inventory Service" as IS
-
-== Tentativa 1 ==
-C -> OS: POST /orders
-OS -> OS: Gerar UUID único
-OS -> K: Enviar {orderId: "abc-123"}
-K -> K: Armazenar com Producer ID + Seq
-K -> IS: Entregar mensagem
-IS -> IS: Processar pedido
-IS -> IS: Cache.add("abc-123")
-IS -> K: ACK
-
-== Tentativa 2 (Retry do Cliente) ==
-C -> OS: POST /orders (mesmo payload)
-OS -> OS: Gerar UUID diferente
-OS -> K: Enviar {orderId: "def-456"}
-note right: Novo pedido, diferente do anterior
-
-== Retry Automático do Kafka ==
-OS -> K: Enviar {orderId: "abc-123"}
-K -> K: Detectar duplicata\n(Producer ID + Seq)
-K -> OS: ACK (sem duplicar)
-note right: Kafka previne duplicação\nno nível de transporte
-
-== Reprocessamento no Consumer ==
-K -> IS: Re-entregar {orderId: "abc-123"}
-IS -> IS: Verificar cache
-IS -> IS: Cache.contains("abc-123") = true
-IS -> IS: Ignorar processamento
-IS -> K: ACK
-note right: Idempotência no nível\nde aplicação
-
-@enduml
-```
+![Indepotencia](diagramas/indepotencia.png)
 
 **Implementação por Camada:**
 
@@ -665,38 +367,7 @@ note right: Idempotência no nível\nde aplicação
 
 ### Métricas Importantes
 
-```plantuml
-@startuml metricas
-!theme aws-orange
-
-package "Kafka Metrics" {
-  [Throughput] as T
-  [Latency] as L
-  [Consumer Lag] as CL
-  [Partition Distribution] as PD
-}
-
-package "Application Metrics" {
-  [Request Rate] as RR
-  [Error Rate] as ER
-  [Processing Time] as PT
-  [Queue Depth] as QD
-}
-
-package "System Metrics" {
-  [CPU Usage] as CPU
-  [Memory Usage] as MEM
-  [Disk I/O] as DIO
-  [Network I/O] as NIO
-}
-
-T --> RR : correlaciona
-L --> PT : correlaciona
-CL --> QD : indica
-ER --> CL : pode causar
-
-@enduml
-```
+![Metricas](diagramas/metricas.png)
 
 ### Dashboard de Monitoramento
 
