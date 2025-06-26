@@ -14,13 +14,30 @@ public class NotificationListener {
     // Cache para idempotência - em produção usaria Redis/BD
     private final Set<String> notifiedOrders = ConcurrentHashMap.newKeySet();
 
-    @KafkaListener(topics = "inventory-events", groupId = "notification-group")
+    @KafkaListener(
+            topics = "inventory-events",
+            groupId = "notification-group",
+            containerFactory = "kafkaListenerContainerFactory"
+    )
     public void notifyUser(Map<String, Object> event, Acknowledgment acknowledgment) {
         try {
             String orderId = (String) event.get("orderId");
             String status = (String) event.get("status");
             String message = (String) event.get("message");
-            Integer itemCount = (Integer) event.get("itemCount");
+
+            // Tratamento seguro para itemCount que pode vir como Integer ou String
+            Object itemCountObj = event.get("itemCount");
+            Integer itemCount = null;
+            if (itemCountObj instanceof Integer) {
+                itemCount = (Integer) itemCountObj;
+            } else if (itemCountObj instanceof String) {
+                try {
+                    itemCount = Integer.parseInt((String) itemCountObj);
+                } catch (NumberFormatException e) {
+                    System.err.println("⚠️ Erro ao converter itemCount: " + itemCountObj);
+                    itemCount = 0;
+                }
+            }
 
             System.out.println("📨 Notification-Service: Recebido evento para pedido " + orderId);
 
@@ -52,6 +69,7 @@ public class NotificationListener {
 
         } catch (Exception e) {
             System.err.println("❌ Erro ao enviar notificação: " + e.getMessage());
+            e.printStackTrace();
             // Em caso de erro, não confirma para retry
         }
     }
